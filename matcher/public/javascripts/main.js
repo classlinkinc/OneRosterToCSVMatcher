@@ -18,10 +18,12 @@ var read = readline.createInterface({
 //Ask for user input
 read.question("Enter name of CSV file in " + process.cwd() + "\nYour input: ", (fileName) => {
 
+	//Add .csv extension if the user didn't
 	if (!fileName.includes(".csv")) fileName += ".csv";
 
 	var filePath = process.cwd() + '//' + fileName;
 
+	//Check if file exists
 	if (fs.existsSync(filePath)) {
 			console.log("Found file");
 	}
@@ -31,13 +33,18 @@ read.question("Enter name of CSV file in " + process.cwd() + "\nYour input: ", (
 		return;
 	}
 
+	//Parse the CSV file and get the Data from OneRoster before continuing
 	console.log("Fetching data from server... this could take a minute.");
 	Promise.all([parseCSV(filePath), requestAllORData()]).then(allData => {
 		console.log("Data succesfully retrived");
 
+		//All CSV Data
 		let csv = allData[0];
+
+		//All OneRoster Data
 		let oneRoster = allData[1];
 		
+		//Get the oneRoster Filter
 		read.question("Filter OneRoster by one of the following: " + string + " ", (orFilter) => {
 			
 			let string = "";
@@ -49,9 +56,10 @@ read.question("Enter name of CSV file in " + process.cwd() + "\nYour input: ", (
 
 			string += '\nYour input: ';
 
+			//Get the CSV Filter
 			read.question("Filter CSV by one of the following: " + string, (csvFilter) => {
 
-				//OneRoster will return data sorted by sourcedId, sort the CSV appropriate
+				//OneRoster will return data sorted by sourcedId, sort the CSV by first property.
 				sortedCSV = sortCSV(csv);
 				generateCSVs(oneRoster, sortedCSV, orFilter, csvFilter);
 				closeStreams();
@@ -69,22 +77,26 @@ function closeStreams() {
 	process.exit();
 }
 
-//Send all requests to OneRoster simultaneously to and return one array containing all the data.
+//Send all requests to OneRoster simultaneously and returns one array containing all the data.
 function requestAllORData() {
 
 	let offset = 0;
 	var allData = [];
 
+	//Create one promise to return all data
 	return new Promise((resolve, reject) => {
 
+		//Make the initial call to get data
 		getOneRosterData(offset).then(data => {
 
 			let totalCount = parseInt(data.total);
 			let amtReturned = parseInt(data.count);
 			allData.push(...data.body.users);
 
+			//If we didn't fetch all the data:
 			if (totalCount > amtReturned) {
 
+				//Loop through and create a new promise to retrieve data in order
 				(function loop(offset) {
 					new Promise((resolve, reject) => {
 						getOneRosterData(offset).then(data => {
@@ -93,16 +105,19 @@ function requestAllORData() {
 							resolve();
 						});
 					}).then(() => {
+						//Check if we retrieved all data
 						if (offset < totalCount) loop(offset);
 						else {
+							//If so return the array
 							resolve(allData);
 						} 
 							
 					});
+					//Pass the looping function the initial amount of data we receieved.
 				})(amtReturned);
 			}
 			else {
-				
+				//Resolve the first promise with the data
 				resolve(allData);
 			}
 
@@ -338,6 +353,7 @@ function writeToFile(filePath, headers, data) {
 
 	for (let entry of data) {
 		for (let item in entry) {
+			//If current item in the line is considered an object, we must stringify it.
 			if (typeof entry[item] === "object") {
 				//We are using a CSV, so replace any commas with semi-colons to prevent confusion
 				entry[item] = JSON.stringify(entry[item]).replace(/,/g, ";");
